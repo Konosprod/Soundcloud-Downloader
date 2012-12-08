@@ -1,0 +1,80 @@
+#!/bin/bash
+
+TMP=`mktemp`
+TMP3=`mktemp`
+TMP4=`mktemp`
+ERRURL="zenity --error --text \"Vous devez entrer une URL.\""
+ERRDIR="zenity --error --text \"Vous devez choisir un répertoire.\""
+CHOSEDIR="zenity --file-selection --directory --title=\"Sélectionnez un répertoire\""
+
+declare -a name
+
+function contains()
+{
+    echo $1 | grep --quiet $2
+}
+
+
+LINK=$(zenity --entry --title="URL" --text="Entrez une URL")
+         
+if [ "$LINK" == "" ]; then 
+    eval $ERRURL
+     exit
+fi
+
+DIR=$(eval $CHOSEDIR)
+
+if [ "$DIR" == "" ]; then
+    eval $ERRDIR 
+    exit
+fi
+
+cd $DIR
+
+exec 3> >(zenity --notification --window-icon="info" --window-icon="info" --listen --text="Downloading...")
+
+if $( contains $LINK 'https')
+then 
+    name=${LINK##"https://soundcloud.com/"}
+    echo "message:Téléchargement de musique:\n$name" >&3
+    mkdir -p ${LINK##"https://soundcloud.com/"}
+    cd ${LINK##"https://soundcloud.com/"}
+else
+    name=${LINK##"http://soundcloud.com/"}
+    echo "message:Téléchargement de musique:\n$name" >&3
+    mkdir -p ${LINK##"http://soundcloud.com/"}
+    cd ${LINK##"http://soundcloud.com/"}
+fi   
+   
+   
+wget -q $LINK -O $TMP
+TMP2=$(sed -ns '1~1p' $TMP)
+URL=`echo $TMP2 | egrep -o "http://media.soundcloud.com/stream/[A-Za-z0-9_-?.=]*"`
+echo "$URL" > $TMP3
+echo $TMP2 | egrep -o "\"title\":\"[A-Za-z0-9_:/.\(\)\" \@\'\+-]*" >$TMP4
+sed -ie 's/^.........//g' $TMP4
+sed -ie 's/"*$//g' $TMP4
+
+i=0
+
+while read line
+do
+    name[$i]="$line"
+    ((i++))
+done < $TMP4
+
+i=0
+
+while read line
+do
+    name_out=${name[$i]}
+    wget -nc -q "$line" -O "$name_out.mp3"
+    ((i++))
+done < $TMP3
+
+rm $TMP
+rm $TMP3
+rm $TMP4 
+
+echo "message:Téléchargement terminé\n" >&3
+exec 3>&-
